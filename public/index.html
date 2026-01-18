@@ -1,0 +1,503 @@
+<!-- c:\Users\Glauber\OneDrive\Documentos\DevAcaiteria\public\index.html -->
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Disparador Telegram + DB</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        .log-box { background: #000; color: #0f0; height: 300px; overflow-y: scroll; font-family: monospace; padding: 10px; border-radius: 5px; }
+        .step-section { display: none; }
+        .step-section.active { display: block; }
+    </style>
+</head>
+<body class="bg-light">
+
+<div class="container mt-5">
+    <h2 class="text-center mb-4">🚀 Disparador Açaíteria</h2>
+
+    <!-- Navegação -->
+    <ul class="nav nav-tabs mb-4" id="myTab">
+        <li class="nav-item"><a class="nav-link" href="#" onclick="showTab('send')">Enviar</a></li>
+        <li class="nav-item"><a class="nav-link" href="#" onclick="showTab('templates')">Templates</a></li>
+        <li class="nav-item"><a class="nav-link" href="#" onclick="showTab('filters')">Filtros Inteligentes</a></li>
+        <li class="nav-item"><a class="nav-link" href="#" onclick="showTab('login')">Conexão</a></li>
+        <li class="nav-item"><a class="nav-link" href="#" onclick="showTab('contacts')">Contatos</a></li>
+        <li class="nav-item"><a class="nav-link" href="#" onclick="showTab('logs_tab')">Histórico</a></li>
+        <li class="nav-item"><a class="nav-link active" href="#" onclick="showTab('config')">Configuração</a></li>
+    </ul>
+
+    <!-- 1. Configuração -->
+    <div id="config" class="step-section active card p-4">
+        <h4>Configurações da API</h4>
+        <div class="mb-3">
+            <label>API ID</label>
+            <input type="text" id="apiId" class="form-control">
+        </div>
+        <div class="mb-3">
+            <label>API Hash</label>
+            <input type="text" id="apiHash" class="form-control">
+        </div>
+        <div class="mb-3">
+            <label>Sessão (Salva no Banco)</label>
+            <input type="text" id="session" class="form-control" disabled placeholder="Gerado automaticamente">
+        </div>
+        <button class="btn btn-primary" onclick="saveConfig()">Salvar Configuração</button>
+    </div>
+
+    <!-- 2. Login -->
+    <div id="login" class="step-section card p-4">
+        <h4>Conectar ao Telegram</h4>
+        <button class="btn btn-success mb-3" onclick="startLogin()">Iniciar Conexão</button>
+        <div id="loginInputs" style="display:none;">
+            <div id="inputPhone" class="mb-2">
+                <label>Telefone (+55...)</label>
+                <div class="input-group">
+                    <input type="text" id="phoneVal" class="form-control">
+                    <button class="btn btn-outline-secondary" onclick="sendInput('phone')">Enviar</button>
+                </div>
+            </div>
+            <div id="inputCode" class="mb-2" style="display:none;">
+                <label>Código do Telegram</label>
+                <div class="input-group">
+                    <input type="text" id="codeVal" class="form-control">
+                    <button class="btn btn-outline-secondary" onclick="sendInput('code')">Enviar</button>
+                </div>
+            </div>
+            <div id="inputPassword" class="mb-2" style="display:none;">
+                <label>Senha 2FA</label>
+                <div class="input-group">
+                    <input type="password" id="passVal" class="form-control">
+                    <button class="btn btn-outline-secondary" onclick="sendInput('password')">Enviar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 3. Contatos (DB) -->
+    <div id="contacts" class="step-section card p-4">
+        <h4>Cadastro de Contatos</h4>
+        <div class="input-group mb-3">
+            <input type="text" id="newContactName" class="form-control" placeholder="Nome">
+            <input type="text" id="newContactPhone" class="form-control" placeholder="Telefone (55...)">
+            <button class="btn btn-success" onclick="addContact()">Adicionar</button>
+            <button class="btn btn-warning ms-2" onclick="importTelegramContacts()">📥 Importar do Telegram</button>
+        </div>
+        
+        <div class="d-flex justify-content-between align-items-center mb-2">
+            <select id="contactsLimit" class="form-select w-auto" onchange="loadContacts(1)">
+                <option value="10">10 por página</option>
+                <option value="20">20 por página</option>
+                <option value="50">50 por página</option>
+            </select>
+            <span id="contactsTotal" class="fw-bold"></span>
+        </div>
+
+        <ul id="contactsList" class="list-group mb-3"></ul>
+        
+        <nav>
+            <ul class="pagination justify-content-center" id="contactsPagination"></ul>
+        </nav>
+    </div>
+
+    <!-- 4. Templates -->
+    <div id="templates" class="step-section card p-4">
+        <h4>Templates de Mensagem</h4>
+        <div class="mb-3">
+            <input type="text" id="tplName" class="form-control mb-2" placeholder="Nome do Template (ex: Promoção Natal)">
+            <textarea id="tplMsg" class="form-control mb-2" placeholder="Mensagem..."></textarea>
+            <button class="btn btn-success" onclick="addTemplate()">Salvar Template</button>
+        </div>
+        <ul id="templatesList" class="list-group"></ul>
+    </div>
+
+    <!-- Filtros Inteligentes -->
+    <div id="filters" class="step-section card p-4">
+        <h4>Filtros de Envio</h4>
+        <p class="text-muted">Encontre contatos que não recebem mensagens há algum tempo.</p>
+        <div class="row mb-3">
+            <div class="col">
+                <label>Dias sem envio (mínimo)</label>
+                <input type="number" id="filterDays" class="form-control" value="10">
+            </div>
+            <div class="col">
+                <label>Limite de contatos</label>
+                <input type="number" id="filterLimit" class="form-control" value="10">
+            </div>
+            <div class="col d-flex align-items-end">
+                <button id="btnFilterSearch" class="btn btn-info w-100" onclick="previewFilter()">🔍 Buscar</button>
+            </div>
+        </div>
+        
+        <div id="filterResults" class="mb-3"></div>
+        
+        <button id="btnSendFilter" class="btn btn-success w-100" style="display:none;" onclick="prepareFilterSend()">
+            ✅ Enviar Campanha para estes contatos
+        </button>
+    </div>
+
+    <!-- 5. Enviar -->
+    <div id="send" class="step-section card p-4">
+        <h4>Criar Campanha</h4>
+        <form id="sendForm">
+            <div class="mb-3">
+                <label>Fonte dos Contatos</label>
+                <select id="sourceSelect" class="form-select" onchange="toggleSource()">
+                    <option value="csv">Upload de Arquivo CSV</option>
+                    <option value="db_all">Todos os Contatos do Banco</option>
+                    <option value="db_filter">Filtro Personalizado (Configurado na aba Filtros)</option>
+                </select>
+            </div>
+
+            <!-- Inputs ocultos para o filtro -->
+            <div id="filterInputs" style="display:none;" class="alert alert-info">
+                <input type="hidden" name="filterDays" id="hiddenFilterDays">
+                <input type="hidden" name="filterLimit" id="hiddenFilterLimit">
+                <strong>Modo Filtro Ativo:</strong> Enviando para contatos sem mensagens há <span id="lblDays"></span> dias (Limite: <span id="lblLimit"></span>).
+            </div>
+
+            <div class="mb-3">
+                <label>Mensagem</label>
+                <textarea name="message" id="sendMsg" class="form-control" rows="3"></textarea>
+                <small class="text-muted"><a href="#" onclick="showTab('templates')">Copiar de um template</a></small>
+            </div>
+
+            <div class="mb-3" id="csvInputDiv">
+                <label>Lista de Contatos (CSV)</label>
+                <input type="file" name="csv" class="form-control" accept=".csv">
+            </div>
+
+            <div class="mb-3">
+                <label>Imagem (Opcional)</label>
+                <input type="file" name="image" class="form-control" accept="image/*">
+            </div>
+            <div class="mb-3">
+                <label>Delay (ms)</label>
+                <input type="number" name="delay" class="form-control" value="3000">
+            </div>
+            <button type="submit" class="btn btn-danger w-100">INICIAR DISPAROS</button>
+            <button type="button" class="btn btn-warning w-100 mt-2" onclick="stopSending()">PARAR ENVIO</button>
+        </form>
+        
+        <div class="mt-4">
+            <h5>Logs de Execução:</h5>
+            <div id="logs" class="log-box"></div>
+        </div>
+    </div>
+
+    <!-- 6. Histórico -->
+    <div id="logs_tab" class="step-section card p-4">
+        <h4>Histórico de Envios (Banco de Dados)</h4>
+        <button class="btn btn-sm btn-secondary mb-2" onclick="loadDbLogs()">Atualizar</button>
+        <table class="table table-striped">
+            <thead><tr><th>Data</th><th>Telefone</th><th>Status</th><th>Erro</th></tr></thead>
+            <tbody id="dbLogsTable"></tbody>
+        </table>
+    </div>
+</div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script>
+    const socket = io();
+    const logBox = document.getElementById('logs');
+
+    function showTab(id) {
+        document.querySelectorAll('.step-section').forEach(el => el.classList.remove('active'));
+        document.querySelectorAll('.nav-link').forEach(el => el.classList.remove('active'));
+        document.getElementById(id).classList.add('active');
+        // Carregar dados ao abrir aba
+        if(id === 'contacts') loadContacts();
+        if(id === 'templates') loadTemplates();
+        if(id === 'logs_tab') loadDbLogs();
+    }
+
+    function toggleSource() {
+        const val = document.getElementById('sourceSelect').value;
+        document.getElementById('csvInputDiv').style.display = val === 'csv' ? 'block' : 'none';
+        document.getElementById('filterInputs').style.display = val === 'db_filter' ? 'block' : 'none';
+    }
+
+    function log(msg) {
+        const div = document.createElement('div');
+        div.textContent = `> ${msg}`;
+        logBox.appendChild(div);
+        logBox.scrollTop = logBox.scrollHeight;
+    }
+
+    // --- API Calls ---
+    
+    // Config
+    fetch('/api/config').then(r => r.json()).then(data => {
+        document.getElementById('apiId').value = data.apiId;
+        document.getElementById('apiHash').value = data.apiHash;
+        document.getElementById('session').value = data.session;
+    });
+
+    function saveConfig() {
+        fetch('/api/config', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                apiId: document.getElementById('apiId').value,
+                apiHash: document.getElementById('apiHash').value,
+                session: document.getElementById('session').value
+            })
+        }).then(() => alert('Configuração Salva!'));
+    }
+
+    // Login
+    function startLogin() {
+        document.getElementById('loginInputs').style.display = 'block';
+        fetch('/api/login/start', { method: 'POST' });
+    }
+    function sendInput(type) {
+        const idMap = { 'phone': 'phoneVal', 'code': 'codeVal', 'password': 'passVal' };
+        const val = document.getElementById(idMap[type]).value;
+        fetch('/api/login/input', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ type, value: val })
+        });
+    }
+
+    // Contatos DB
+    function loadContacts(page = 1) {
+        const limit = document.getElementById('contactsLimit') ? document.getElementById('contactsLimit').value : 10;
+        
+        fetch(`/api/db/contacts?page=${page}&limit=${limit}`).then(r => r.json()).then(data => {
+            const list = document.getElementById('contactsList');
+            list.innerHTML = '';
+            
+            // Suporte para o novo formato paginado
+            const contacts = data.contacts || [];
+            const total = data.total || 0;
+
+            contacts.forEach(c => {
+                list.innerHTML += `<li class="list-group-item d-flex justify-content-between align-items-center">
+                    <span>${c.name || 'Sem Nome'} - ${c.phone}</span>
+                    <span class="badge bg-secondary rounded-pill">${c.message_count} envios</span>
+                </li>`;
+            });
+
+            // Atualizar Paginação
+            if(document.getElementById('contactsTotal')) {
+                document.getElementById('contactsTotal').innerText = `Total: ${total}`;
+                renderPagination(total, page, limit);
+            }
+        });
+    }
+
+    function renderPagination(total, page, limit) {
+        const totalPages = Math.ceil(total / limit);
+        const pagination = document.getElementById('contactsPagination');
+        pagination.innerHTML = '';
+        
+        if(totalPages <= 1) return;
+
+        // Anterior
+        pagination.innerHTML += `<li class="page-item ${page === 1 ? 'disabled' : ''}">
+            <a class="page-link" href="#" onclick="loadContacts(${page - 1})">Anterior</a>
+        </li>`;
+
+        // Páginas (Simplificado: mostra atual e vizinhos)
+        for(let i = 1; i <= totalPages; i++) {
+             if (i === 1 || i === totalPages || (i >= page - 2 && i <= page + 2)) {
+                pagination.innerHTML += `<li class="page-item ${i === page ? 'active' : ''}">
+                    <a class="page-link" href="#" onclick="loadContacts(${i})">${i}</a>
+                </li>`;
+             } else if (pagination.lastChild.innerText !== '...') {
+                 if ((i === page - 3 && i > 1) || (i === page + 3 && i < totalPages)) {
+                    pagination.innerHTML += `<li class="page-item disabled"><span class="page-link">...</span></li>`;
+                 }
+             }
+        }
+
+        // Próximo
+        pagination.innerHTML += `<li class="page-item ${page === totalPages ? 'disabled' : ''}">
+            <a class="page-link" href="#" onclick="loadContacts(${page + 1})">Próximo</a>
+        </li>`;
+    }
+
+    function addContact() {
+        const name = document.getElementById('newContactName').value;
+        const phone = document.getElementById('newContactPhone').value;
+        fetch('/api/db/contacts', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ name, phone })
+        }).then(() => {
+            document.getElementById('newContactName').value = '';
+            document.getElementById('newContactPhone').value = '';
+            loadContacts();
+        });
+    }
+    function importTelegramContacts() {
+        if(!confirm("Isso irá importar todos os contatos da sua conta do Telegram para o banco de dados. Deseja continuar?")) return;
+        
+        // Feedback visual
+        const btn = event.target;
+        const originalText = btn.innerText;
+        btn.innerText = "Importando...";
+        btn.disabled = true;
+
+        fetch('/api/telegram/import-contacts', { method: 'POST' })
+            .then(r => r.json())
+            .then(data => {
+                alert(data.message || data.error);
+                loadContacts(); // Recarrega a lista na tela
+            })
+            .finally(() => {
+                btn.innerText = originalText;
+                btn.disabled = false;
+            });
+    }
+
+    // Templates DB
+    function loadTemplates() {
+        fetch('/api/db/templates').then(r => r.json()).then(data => {
+            const list = document.getElementById('templatesList');
+            list.innerHTML = '';
+            data.forEach(t => {
+                list.innerHTML += `<li class="list-group-item d-flex justify-content-between align-items-center">
+                    <div><strong>${t.name}</strong>: ${t.message.substring(0,30)}...</div>
+                    <button class="btn btn-sm btn-info" onclick="useTemplate('${encodeURIComponent(t.message)}')">Usar</button>
+                </li>`;
+            });
+        });
+    }
+    function addTemplate() {
+        const name = document.getElementById('tplName').value;
+        const message = document.getElementById('tplMsg').value;
+        fetch('/api/db/templates', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ name, message })
+        }).then(() => {
+            document.getElementById('tplName').value = '';
+            document.getElementById('tplMsg').value = '';
+            loadTemplates();
+        });
+    }
+    function useTemplate(msg) {
+        document.getElementById('sendMsg').value = decodeURIComponent(msg);
+        showTab('send');
+    }
+
+    // Logs DB
+    function loadDbLogs() {
+        fetch('/api/db/logs').then(r => r.json()).then(data => {
+            const tbody = document.getElementById('dbLogsTable');
+            tbody.innerHTML = '';
+            data.forEach(l => {
+                tbody.innerHTML += `<tr>
+                    <td>${new Date(l.sent_at).toLocaleString()}</td>
+                    <td>${l.phone}</td>
+                    <td>${l.status}</td>
+                    <td>${l.error_details || ''}</td>
+                </tr>`;
+            });
+        });
+    }
+
+    // Filtros
+    function previewFilter() {
+        const days = document.getElementById('filterDays').value;
+        const limit = document.getElementById('filterLimit').value;
+        const btn = document.getElementById('btnFilterSearch');
+        const originalText = btn.innerText;
+        
+        btn.innerText = "Buscando...";
+        btn.disabled = true;
+        const resultsDiv = document.getElementById('filterResults');
+        resultsDiv.innerHTML = '';
+        
+        fetch('/api/db/filter-preview', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ days, limit })
+        }).then(r => r.json()).then(data => {
+            if (data.error) throw new Error(data.error);
+
+            if(!Array.isArray(data) || data.length === 0) {
+                resultsDiv.innerHTML = '<div class="alert alert-warning">Nenhum contato encontrado com estes critérios.</div>';
+                document.getElementById('btnSendFilter').style.display = 'none';
+                return;
+            }
+            
+            let html = `<table class="table table-sm"><thead><tr><th>Nome</th><th>Telefone</th><th>Último Envio</th><th>Total</th></tr></thead><tbody>`;
+            data.forEach(c => {
+                const last = c.last_sent_at ? new Date(c.last_sent_at).toLocaleDateString() : 'Nunca';
+                html += `<tr><td>${c.name || 'Sem Nome'}</td><td>${c.phone}</td><td>${last}</td><td>${c.message_count}</td></tr>`;
+            });
+            html += `</tbody></table>`;
+            resultsDiv.innerHTML = html;
+            document.getElementById('btnSendFilter').style.display = 'block';
+        }).catch(err => {
+            console.error(err);
+            resultsDiv.innerHTML = `<div class="alert alert-danger">Erro: ${err.message}</div>`;
+        }).finally(() => {
+            btn.innerText = originalText;
+            btn.disabled = false;
+        });
+    }
+
+    function prepareFilterSend() {
+        const days = document.getElementById('filterDays').value;
+        const limit = document.getElementById('filterLimit').value;
+        document.getElementById('hiddenFilterDays').value = days;
+        document.getElementById('hiddenFilterLimit').value = limit;
+        document.getElementById('lblDays').innerText = days;
+        document.getElementById('lblLimit').innerText = limit;
+        
+        showTab('send');
+        const select = document.getElementById('sourceSelect');
+        select.value = 'db_filter';
+        toggleSource();
+    }
+
+    // Envio
+    document.getElementById('sendForm').onsubmit = async (e) => {
+        e.preventDefault();
+        const formData = new FormData(e.target);
+        
+        // Adicionar tipo de fonte
+        const sourceType = document.getElementById('sourceSelect').value;
+        formData.append('sourceType', sourceType);
+
+        if(!confirm("Tem certeza que deseja iniciar os disparos?")) return;
+        
+        const res = await fetch('/api/send', { method: 'POST', body: formData });
+        const data = await res.json();
+        alert(data.message || data.error);
+    };
+
+    // Parar Envio
+    function stopSending() {
+        if(!confirm("Deseja realmente parar o envio em massa?")) return;
+        fetch('/api/stop', { method: 'POST' })
+            .then(r => r.json())
+            .then(data => log("🛑 " + data.message));
+    }
+
+    // Socket Events
+    socket.on('log', msg => log(msg));
+    socket.on('status', status => {
+        if(status === 'waiting_phone') document.getElementById('inputPhone').style.display = 'block';
+        if(status === 'waiting_code') {
+            document.getElementById('inputPhone').style.display = 'none';
+            document.getElementById('inputCode').style.display = 'block';
+        }
+        if(status === 'waiting_password') {
+            document.getElementById('inputCode').style.display = 'none';
+            document.getElementById('inputPassword').style.display = 'block';
+        }
+        if(status === 'ready') {
+            document.getElementById('loginInputs').style.display = 'none';
+            alert("Conectado com sucesso!");
+            showTab('send');
+        }
+    });
+</script>
+</body>
+</html>
