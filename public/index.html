@@ -206,6 +206,52 @@
     </div>
 </div>
 
+<!-- Toast Container (Notificações) -->
+<div class="toast-container position-fixed top-0 end-0 p-3" style="z-index: 1100"></div>
+
+<!-- Modal de Alerta (Estilo Moderno) -->
+<div class="modal fade" id="alertModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header border-0 pb-0">
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body text-center pb-4">
+                <div class="mb-3 text-warning">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="60" height="60" fill="currentColor" class="bi bi-exclamation-circle" viewBox="0 0 16 16">
+                        <path d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14zm0 1A8 8 0 1 0 8 0a8 8 0 0 0 0 16z"/>
+                        <path d="M7.002 11a1 1 0 1 1 2 0 1 1 0 0 1-2 0zM7.1 4.995a.905.905 0 1 1 1.8 0l-.35 3.507a.552.552 0 0 1-1.1 0L7.1 4.995z"/>
+                    </svg>
+                </div>
+                <h4 id="alertModalLabel" class="mb-2">Atenção</h4>
+                <p id="alertModalBody" class="text-muted"></p>
+            </div>
+            <div class="modal-footer border-0 justify-content-center pt-0">
+                <button type="button" class="btn btn-primary px-5" data-bs-dismiss="modal">OK</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal de Confirmação -->
+<div class="modal fade" id="confirmModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content shadow">
+            <div class="modal-header">
+                <h5 class="modal-title" id="confirmModalLabel">Confirmação</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-4">
+                <p id="confirmModalBody" class="mb-0"></p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-primary" id="confirmBtnAction">Confirmar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- Modal Galeria -->
 <div class="modal fade" id="galleryModal" tabindex="-1">
     <div class="modal-dialog modal-lg">
@@ -250,6 +296,68 @@
         logBox.scrollTop = logBox.scrollHeight;
     }
 
+    // --- Notificações (Toasts) e Alertas (Modal) ---
+    function showToast(message, type = 'success') {
+        const container = document.querySelector('.toast-container');
+        let bgClass = 'bg-primary text-white';
+        let closeBtnClass = 'btn-close-white';
+        
+        // Cores solicitadas: Green (Success), Yellow (Caution), Red (Error)
+        if (type === 'success') bgClass = 'bg-success text-white';
+        else if (type === 'warning') { bgClass = 'bg-warning text-dark'; closeBtnClass = ''; }
+        else if (type === 'error') bgClass = 'bg-danger text-white';
+
+        const toastHtml = `
+            <div class="toast align-items-center ${bgClass} border-0" role="alert" aria-live="assertive" aria-atomic="true">
+                <div class="d-flex">
+                    <div class="toast-body">${message}</div>
+                    <button type="button" class="btn-close ${closeBtnClass} me-2 m-auto" data-bs-dismiss="toast"></button>
+                </div>
+            </div>`;
+        
+        const div = document.createElement('div');
+        div.innerHTML = toastHtml;
+        const toastEl = div.firstElementChild;
+        container.appendChild(toastEl);
+        const toast = new bootstrap.Toast(toastEl);
+        toast.show();
+        toastEl.addEventListener('hidden.bs.toast', () => toastEl.remove());
+    }
+
+    const alertModalObj = new bootstrap.Modal(document.getElementById('alertModal'));
+    function showAlert(message, title = 'Atenção') {
+        document.getElementById('alertModalLabel').innerText = title;
+        document.getElementById('alertModalBody').innerText = message;
+        alertModalObj.show();
+    }
+
+    // --- Lógica do Modal de Confirmação ---
+    const confirmModalObj = new bootstrap.Modal(document.getElementById('confirmModal'));
+    let confirmResolver = null;
+
+    document.getElementById('confirmBtnAction').onclick = () => {
+        if(confirmResolver) confirmResolver(true);
+        confirmResolver = null; // Evita dupla resolução
+        confirmModalObj.hide();
+    };
+    document.getElementById('confirmModal').addEventListener('hidden.bs.modal', () => {
+        if(confirmResolver) {
+            confirmResolver(false);
+            confirmResolver = null;
+        }
+    });
+
+    function showConfirm(message, title = 'Confirmação', btnText = 'Confirmar', btnClass = 'btn-primary') {
+        document.getElementById('confirmModalLabel').innerText = title;
+        document.getElementById('confirmModalBody').innerText = message;
+        const btn = document.getElementById('confirmBtnAction');
+        btn.innerText = btnText;
+        btn.className = `btn ${btnClass}`;
+        
+        confirmModalObj.show();
+        return new Promise(resolve => { confirmResolver = resolve; });
+    }
+
     // --- API Calls ---
     
     // Config
@@ -268,7 +376,7 @@
                 apiHash: document.getElementById('apiHash').value,
                 session: document.getElementById('session').value
             })
-        }).then(() => alert('Configuração Salva!'));
+        }).then(() => showToast('Configuração Salva!', 'success'));
     }
 
     // Login
@@ -357,8 +465,8 @@
             loadContacts();
         });
     }
-    function importTelegramContacts() {
-        if(!confirm("Isso irá importar todos os contatos da sua conta do Telegram para o banco de dados. Deseja continuar?")) return;
+    async function importTelegramContacts() {
+        if(!await showConfirm("Isso irá importar todos os contatos da sua conta do Telegram para o banco de dados. Deseja continuar?", "Importar Contatos", "Importar", "btn-warning")) return;
         
         // Feedback visual
         const btn = event.target;
@@ -369,7 +477,11 @@
         fetch('/api/telegram/import-contacts', { method: 'POST' })
             .then(r => r.json())
             .then(data => {
-                alert(data.message || data.error);
+                if (data.success) {
+                    showToast(data.message, 'success');
+                } else {
+                    showAlert(data.error, 'Erro na Importação');
+                }
                 loadContacts(); // Recarrega a lista na tela
             })
             .finally(() => {
@@ -460,7 +572,7 @@
             document.getElementById('btnSendFilter').style.display = 'block';
         }).catch(err => {
             console.error(err);
-            resultsDiv.innerHTML = `<div class="alert alert-danger">Erro: ${err.message}</div>`;
+            showToast(`Erro: ${err.message}`, 'error');
         }).finally(() => {
             btn.innerText = originalText;
             btn.disabled = false;
@@ -530,8 +642,8 @@
         document.getElementById('selectedGalleryImage').style.display = 'none';
     }
 
-    function deleteGalleryImage(id) {
-        if(!confirm("Excluir imagem permanentemente?")) return;
+    async function deleteGalleryImage(id) {
+        if(!await showConfirm("Excluir imagem permanentemente?", "Excluir Imagem", "Excluir", "btn-danger")) return;
         fetch(`/api/db/gallery/${id}`, { method: 'DELETE' }).then(() => loadGallery());
     }
 
@@ -544,19 +656,26 @@
         const sourceType = document.getElementById('sourceSelect').value;
         formData.append('sourceType', sourceType);
 
-        if(!confirm("Tem certeza que deseja iniciar os disparos?")) return;
+        if(!await showConfirm("Tem certeza que deseja iniciar os disparos?", "Iniciar Campanha", "Iniciar", "btn-success")) return;
         
         const res = await fetch('/api/send', { method: 'POST', body: formData });
         const data = await res.json();
-        alert(data.message || data.error);
+        if (data.success) {
+            showToast(data.message, 'success');
+        } else {
+            showAlert(data.error || data.message, 'Erro no Envio');
+        }
     };
 
     // Parar Envio
-    function stopSending() {
-        if(!confirm("Deseja realmente parar o envio em massa?")) return;
+    async function stopSending() {
+        if(!await showConfirm("Deseja realmente parar o envio em massa?", "Parar Envio", "Parar", "btn-danger")) return;
         fetch('/api/stop', { method: 'POST' })
             .then(r => r.json())
-            .then(data => log("🛑 " + data.message));
+            .then(data => {
+                log("🛑 " + data.message);
+                showToast(data.message, 'warning');
+            });
     }
 
     // Socket Events
@@ -573,7 +692,7 @@
         }
         if(status === 'ready') {
             document.getElementById('loginInputs').style.display = 'none';
-            alert("Conectado com sucesso!");
+            showToast("Conectado com sucesso!", 'success');
             showTab('send');
         }
     });
