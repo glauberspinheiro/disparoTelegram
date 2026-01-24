@@ -24,6 +24,7 @@ const upload = multer({ storage });
 
 // Middleware
 app.use(express.static("public"));
+app.use("/uploads", express.static("uploads"));
 app.use(express.json());
 
 // Criar pastas necessárias
@@ -99,9 +100,23 @@ app.post("/api/send", upload.fields([{ name: 'csv' }, { name: 'image' }]), async
   const message = req.body.message;
   const delay = Number(req.body.delay) || 3000;
   const sourceType = req.body.sourceType; // 'csv', 'db_all', 'db_filter'
+  const galleryId = req.body.galleryId;
   
   const csvFile = req.files['csv'] ? req.files['csv'][0].path : null;
-  const imageFile = req.files['image'] ? req.files['image'][0].path : null;
+  let imageFile = req.files['image'] ? req.files['image'][0].path : null;
+
+  // 1. Se fez upload, salva na galeria automaticamente
+  if (req.files['image']) {
+    const f = req.files['image'][0];
+    try {
+      await db.pool.query("INSERT INTO gallery (filename, original_name, path) VALUES ($1, $2, $3)", [f.filename, f.originalname, f.path]);
+    } catch (e) { console.error("Erro ao salvar na galeria:", e); }
+  }
+  // 2. Se não fez upload, mas selecionou da galeria
+  else if (galleryId) {
+    const gRes = await db.pool.query("SELECT path FROM gallery WHERE id = $1", [galleryId]);
+    if (gRes.rows.length > 0) imageFile = gRes.rows[0].path;
+  }
 
   let source = csvFile;
 
@@ -243,6 +258,24 @@ app.post("/api/db/templates", async (req, res) => {
   const { name, message } = req.body;
   try {
     await db.pool.query("INSERT INTO templates (name, message) VALUES ($1, $2)", [name, message]);
+    res.json({ success: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Galeria
+app.get("/api/db/gallery", async (req, res) => {
+  try {
+    const result = await db.pool.query("SELECT * FROM gallery ORDER BY id DESC");
+    res.json(result.rows);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.delete("/api/db/gallery/:id", async (req, res) => {
+  try {
+    const r = await db.pool.query("DELETE FROM gallery WHERE id = $1 RETURNING path", [req.params.id]);
+    if (r.rows.length > 0 && fs.existsSync(r.rows[0].path)) {
+      fs.unlinkSync(r.rows[0].path);
+    }
     res.json({ success: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });

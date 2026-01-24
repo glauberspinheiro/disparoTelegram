@@ -48,6 +48,17 @@ const initDb = async () => {
 
     // Tabela de Logs
     await client.query(`CREATE TABLE IF NOT EXISTS logs (id SERIAL PRIMARY KEY, phone VARCHAR(20), status VARCHAR(20), error_details TEXT, sent_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP);`);
+
+    // Tabela de Galeria
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS gallery (
+        id SERIAL PRIMARY KEY,
+        filename VARCHAR(255) NOT NULL,
+        original_name VARCHAR(255),
+        path VARCHAR(255) NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
     
     console.log("Banco de dados PostgreSQL conectado e tabelas verificadas.");
   } catch (err) {

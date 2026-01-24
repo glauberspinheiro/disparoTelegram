@@ -38,3 +38,12 @@ CREATE TABLE IF NOT EXISTS logs (
     error_details TEXT,
     sent_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+-- Tabela de Galeria
+CREATE TABLE IF NOT EXISTS gallery (
+    id SERIAL PRIMARY KEY,
+    filename VARCHAR(255) NOT NULL,
+    original_name VARCHAR(255),
+    path VARCHAR(255) NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
