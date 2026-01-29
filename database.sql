@@ -44,6 +44,7 @@ CREATE TABLE IF NOT EXISTS gallery (
     id SERIAL PRIMARY KEY,
     filename VARCHAR(255) NOT NULL,
     original_name VARCHAR(255),
-    path VARCHAR(255) NOT NULL,
+    data TEXT,
+    mime_type VARCHAR(50),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );

@@ -103,19 +103,28 @@ app.post("/api/send", upload.fields([{ name: 'csv' }, { name: 'image' }]), async
   const galleryId = req.body.galleryId;
   
   const csvFile = req.files['csv'] ? req.files['csv'][0].path : null;
-  let imageFile = req.files['image'] ? req.files['image'][0].path : null;
+  let imageFile = null; // Agora armazenará Buffer ou Path
 
-  // 1. Se fez upload, salva na galeria automaticamente
+  // 1. Se fez upload: Lê, Converte p/ Base64, Salva no DB e Deleta Arquivo
   if (req.files['image']) {
     const f = req.files['image'][0];
+    const bitmap = fs.readFileSync(f.path);
+    const base64 = bitmap.toString('base64');
+    
     try {
-      await db.pool.query("INSERT INTO gallery (filename, original_name, path) VALUES ($1, $2, $3)", [f.filename, f.originalname, f.path]);
+      await db.pool.query("INSERT INTO gallery (filename, original_name, data, mime_type) VALUES ($1, $2, $3, $4)", 
+        [f.filename, f.originalname, base64, f.mimetype]);
     } catch (e) { console.error("Erro ao salvar na galeria:", e); }
+    
+    imageFile = bitmap; // Usa o Buffer para enviar agora
+    fs.unlinkSync(f.path); // Não precisamos mais do arquivo físico
   }
-  // 2. Se não fez upload, mas selecionou da galeria
+  // 2. Se selecionou da galeria: Busca Base64 e converte para Buffer
   else if (galleryId) {
-    const gRes = await db.pool.query("SELECT path FROM gallery WHERE id = $1", [galleryId]);
-    if (gRes.rows.length > 0) imageFile = gRes.rows[0].path;
+    const gRes = await db.pool.query("SELECT data FROM gallery WHERE id = $1", [galleryId]);
+    if (gRes.rows.length > 0 && gRes.rows[0].data) {
+      imageFile = Buffer.from(gRes.rows[0].data, 'base64');
+    }
   }
 
   let source = csvFile;
@@ -272,10 +281,7 @@ app.get("/api/db/gallery", async (req, res) => {
 
 app.delete("/api/db/gallery/:id", async (req, res) => {
   try {
-    const r = await db.pool.query("DELETE FROM gallery WHERE id = $1 RETURNING path", [req.params.id]);
-    if (r.rows.length > 0 && fs.existsSync(r.rows[0].path)) {
-      fs.unlinkSync(r.rows[0].path);
-    }
+    await db.pool.query("DELETE FROM gallery WHERE id = $1", [req.params.id]);
     res.json({ success: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -291,6 +297,7 @@ app.get("/api/db/logs", async (req, res) => {
 // --- Socket.io para Logs em Tempo Real ---
 telegramService.on("log", (msg) => io.emit("log", msg));
 telegramService.on("status", (status) => io.emit("status", status));
+telegramService.on("progress", (data) => io.emit("progress", data));
 telegramService.on("session", async (session) => {
     // Salvar sessão no Banco
     await db.pool.query("INSERT INTO settings (key, value) VALUES ('session', $1) ON CONFLICT (key) DO UPDATE SET value = $1", [session]);

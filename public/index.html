@@ -186,6 +186,12 @@
                 <input type="number" name="delay" class="form-control" value="3000">
             </div>
             <button type="submit" class="btn btn-danger w-100">INICIAR DISPAROS</button>
+            
+            <!-- Barra de Progresso -->
+            <div class="progress mt-3" style="height: 25px; display: none;" id="progressContainer">
+                <div id="progressBar" class="progress-bar progress-bar-striped progress-bar-animated bg-success" role="progressbar" style="width: 0%;">0%</div>
+            </div>
+
             <button type="button" class="btn btn-warning w-100 mt-2" onclick="stopSending()">PARAR ENVIO</button>
         </form>
         
@@ -613,12 +619,11 @@
                 return;
             }
             data.forEach(img => {
-                // Corrige barras invertidas do Windows para exibir no navegador
-                const webPath = img.path.replace(/\\/g, '/');
+                // Usa Base64 para exibir a imagem
                 grid.innerHTML += `
                 <div class="col-md-3 col-6 text-center">
                     <div class="card h-100">
-                        <img src="/${webPath}" class="card-img-top" style="height: 100px; object-fit: cover; cursor: pointer;" onclick="selectGalleryImage(${img.id}, '/${webPath}')">
+                        <img src="data:${img.mime_type};base64,${img.data}" class="card-img-top" style="height: 100px; object-fit: cover; cursor: pointer;" onclick="selectGalleryImage(${img.id}, 'data:${img.mime_type};base64,${img.data}')">
                         <div class="card-body p-2">
                             <small class="d-block text-truncate" title="${img.original_name}">${img.original_name}</small>
                             <button class="btn btn-sm btn-danger mt-1" onclick="deleteGalleryImage(${img.id})">🗑️</button>
@@ -629,11 +634,11 @@
         });
     }
 
-    function selectGalleryImage(id, path) {
+    function selectGalleryImage(id, base64Src) {
         document.getElementById('galleryId').value = id;
         document.getElementById('fileInput').value = ''; // Limpa upload manual
         document.getElementById('selectedGalleryImage').style.display = 'block';
-        document.getElementById('previewGallery').src = path;
+        document.getElementById('previewGallery').src = base64Src;
         closeGallery();
     }
 
@@ -658,6 +663,13 @@
 
         if(!await showConfirm("Tem certeza que deseja iniciar os disparos?", "Iniciar Campanha", "Iniciar", "btn-success")) return;
         
+        // Resetar barra de progresso
+        const pBar = document.getElementById('progressBar');
+        document.getElementById('progressContainer').style.display = 'flex';
+        pBar.style.width = '0%';
+        pBar.innerText = 'Iniciando...';
+        pBar.classList.add('progress-bar-animated');
+
         const res = await fetch('/api/send', { method: 'POST', body: formData });
         const data = await res.json();
         if (data.success) {
@@ -694,6 +706,17 @@
             document.getElementById('loginInputs').style.display = 'none';
             showToast("Conectado com sucesso!", 'success');
             showTab('send');
+        }
+    });
+    
+    // Atualização da Barra de Progresso
+    socket.on('progress', data => {
+        const bar = document.getElementById('progressBar');
+        document.getElementById('progressContainer').style.display = 'flex';
+        bar.style.width = data.percent + '%';
+        bar.innerText = `${data.percent}% (${data.current}/${data.total})`;
+        if(data.percent === 100) {
+            bar.classList.remove('progress-bar-animated');
         }
     });
 </script>

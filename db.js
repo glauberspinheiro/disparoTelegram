@@ -55,10 +55,18 @@ const initDb = async () => {
         id SERIAL PRIMARY KEY,
         filename VARCHAR(255) NOT NULL,
         original_name VARCHAR(255),
-        path VARCHAR(255) NOT NULL,
+        data TEXT,
+        mime_type VARCHAR(50),
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
     `);
+
+    // Migração: Adicionar colunas para suporte a Base64 em bancos existentes
+    try {
+      await client.query(`ALTER TABLE gallery ADD COLUMN IF NOT EXISTS data TEXT;`);
+      await client.query(`ALTER TABLE gallery ADD COLUMN IF NOT EXISTS mime_type VARCHAR(50);`);
+      await client.query(`ALTER TABLE gallery ALTER COLUMN path DROP NOT NULL;`); // Torna path opcional
+    } catch (e) {}
     
     console.log("Banco de dados PostgreSQL conectado e tabelas verificadas.");
   } catch (err) {

@@ -55,7 +55,7 @@ const loadContacts = (source) => {
   }).filter((row) => row.phone);
 };
 
-const importAndSend = async (client, contact, index, defaultMessage, defaultImagePath, uploadedDefaultImage, logger) => {
+const importAndSend = async (client, contact, index, defaultMessage, defaultImage, uploadedDefaultImage, logger) => {
   const clientId = BigInt(Date.now()) + BigInt(index + 1);
   const result = await client.invoke(
     new Api.contacts.ImportContacts({
@@ -82,14 +82,16 @@ const importAndSend = async (client, contact, index, defaultMessage, defaultImag
     return;
   }
 
-  // Lógica de Seleção de Imagem (Prioridade: Contato > UploadedDefault > PathDefault)
+  // Lógica de Seleção de Imagem (Prioridade: Contato > UploadedDefault > Buffer/Path Default)
   let fileToSend = null;
   if (contact.image && fs.existsSync(contact.image)) {
     fileToSend = contact.image; // Imagem específica do contato
   } else if (uploadedDefaultImage) {
     fileToSend = uploadedDefaultImage; // Imagem padrão já enviada ao Telegram (Rápido)
-  } else if (defaultImagePath && fs.existsSync(defaultImagePath)) {
-    fileToSend = defaultImagePath; // Fallback
+  } else if (defaultImage) {
+    // Aceita Buffer (do DB) ou String (Caminho)
+    if (Buffer.isBuffer(defaultImage)) fileToSend = defaultImage;
+    else if (typeof defaultImage === 'string' && fs.existsSync(defaultImage)) fileToSend = defaultImage;
   }
 
   if (fileToSend) {
@@ -176,7 +178,7 @@ class TelegramService extends EventEmitter {
     this.log("🛑 Solicitação de parada recebida. O envio será interrompido após a mensagem atual.");
   }
 
-  async startBulkSend(source, message, imagePath, delay, onResult) {
+  async startBulkSend(source, message, imageFile, delay, onResult) {
     if (!this.client || !await this.client.checkAuthorization()) {
       this.log("Erro: Cliente não está conectado.");
       return;
@@ -184,11 +186,15 @@ class TelegramService extends EventEmitter {
 
     // --- OTIMIZAÇÃO: Upload Prévio da Imagem Padrão ---
     let uploadedFile = null;
-    if (imagePath && fs.existsSync(imagePath)) {
+    // Verifica se é um Buffer válido ou um arquivo existente
+    const isValidImage = imageFile && (Buffer.isBuffer(imageFile) || (typeof imageFile === 'string' && fs.existsSync(imageFile)));
+    
+    if (isValidImage) {
       this.log("Otimizando: Fazendo upload da imagem padrão para o Telegram...");
       try {
         uploadedFile = await this.client.uploadFile({
-          file: imagePath,
+          file: imageFile,
+          name: 'image.jpg', // Nome genérico ajuda o Telegram a identificar
           workers: 1,
         });
         this.log("Upload concluído. A imagem será reutilizada para todos os contatos.");
@@ -201,6 +207,7 @@ class TelegramService extends EventEmitter {
     const contacts = loadContacts(source);
     this.log(`Carregados ${contacts.length} contatos para envio.`);
 
+    const total = contacts.length;
     this.shouldStop = false; // Reseta a flag antes de começar
 
     for (let i = 0; i < contacts.length; i += 1) {
@@ -210,7 +217,11 @@ class TelegramService extends EventEmitter {
       }
 
       try {
-        await importAndSend(this.client, contacts[i], i, message, imagePath, uploadedFile, (msg) => this.log(msg));
+        // Emitir progresso
+        const percent = Math.round(((i + 1) / total) * 100);
+        this.emit("progress", { current: i + 1, total: total, percent: percent });
+
+        await importAndSend(this.client, contacts[i], i, message, imageFile, uploadedFile, (msg) => this.log(msg));
         if (onResult) await onResult(contacts[i], 'SUCESSO', null);
       } catch (err) {
         const msg = String(err && err.message ? err.message : err);
